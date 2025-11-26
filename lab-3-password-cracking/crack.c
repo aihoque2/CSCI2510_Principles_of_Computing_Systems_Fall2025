@@ -24,7 +24,7 @@
 #include <string.h>
 
 
-#define ALPHABET_SIZE 64
+#define ALPHABET_SIZE 26
 
 char ALPHABET[] = "abcdefghijklmnopqrstuvwxyz"
                   "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -34,7 +34,7 @@ struct crypt_data* data_arr;
 
 bool stop = false;
 pthread_mutex_t stop_mutex = PTHREAD_MUTEX_INITIALIZER;
-char found_pass[128]; // buffer to store found password
+char found_pass[8]; // buffer to store found password (max key size is 8)
 pthread_mutex_t pswd_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 
@@ -59,8 +59,8 @@ int get_stop(){
 
 struct ThreadArg{
   char salt[3];      // 3 bytes salt
-  char* expected;    //  expected hashread idx
-  int idx;           // th
+  char* expected;    //  expected hash
+  int idx;           // the index of the thread
   int start;         // start idx of keys to test (inclusive)
   int end;           // end idx of keys to test (exclusive)
   int keysize;       // given keysize
@@ -157,8 +157,6 @@ int main( int argc, char* argv[] ){
     memset(&data_arr[i], 0, sizeof(struct crypt_data));
   }
 
-
-
   // create thread args array
   struct ThreadArg* args = malloc(num_threads * sizeof(struct ThreadArg));
   if (!args) {
@@ -177,49 +175,49 @@ int main( int argc, char* argv[] ){
 
 
 
-  for (int ksize = 1; ksize < keysize; ksize++){
+  for (int ksize = 1; ksize <= keysize; ksize++){
 
-  printf("here's ksize: %d\n", ksize);
+    printf("here's ksize: %d\n", ksize);
 
-  int total_keys = 1;
-  // calc total keys = ALPHABET_SIZE^keysize
-  for (int i = 0; i < keysize; i++){
-    total_keys *= ALPHABET_SIZE;
-  }
+    int total_keys = 1;
+    // calc total keys = ALPHABET_SIZE^keysize
+    for (int i = 0; i < keysize; i++){
+      total_keys *= ALPHABET_SIZE;
+    }
 
-      // divide keyspace among threads
-  int base  = total_keys / num_threads;
-  int extra = total_keys % num_threads; // number of threads that will analyze extra keys
-  int curr  = 0;
+    // divide keyspace among threads
+    int base  = total_keys / num_threads;
+    int extra = total_keys % num_threads; // number of threads that will analyze extra keys
+    int curr  = 0;
 
-  for (int i = 0 ; i < num_threads; i++){
-    int chunk = base + (i < extra ? 1 : 0);
+    for (int i = 0 ; i < num_threads; i++){
+      int chunk = base + (i < extra ? 1 : 0);
 
-    args[i].idx      = i;
-    args[i].start    = curr;
-    args[i].end      = curr + chunk;
-    args[i].keysize  = ksize;
-    args[i].expected = expected;
+      args[i].idx      = i;
+      args[i].start    = curr;
+      args[i].end      = curr + chunk;
+      args[i].keysize  = ksize;
+      args[i].expected = expected;
 
-    args[i].salt[0] = salt[0];
-    args[i].salt[1] = salt[1];
-    args[i].salt[2] = '\0';
+      args[i].salt[0] = salt[0];
+      args[i].salt[1] = salt[1];
+      args[i].salt[2] = '\0';
 
-    curr += chunk;
+      curr += chunk;
 
-    pthread_create(&threads_arr[i], NULL, crack_func, &args[i]);
-  }
-  // wait for threads
-  for (int i = 0 ; i < num_threads; i++){
-    pthread_join(threads_arr[i], NULL);
-  }
-  pthread_mutex_lock(&stop_mutex);
-  bool found = stop;
-  pthread_mutex_unlock(&stop_mutex);
-  if (found) {
-    printf("We found the password: %s\n", found_pass);
-    break;
-  } 
+      pthread_create(&threads_arr[i], NULL, crack_func, &args[i]);
+    }
+    // wait for threads
+    for (int i = 0 ; i < num_threads; i++){
+      pthread_join(threads_arr[i], NULL);
+    }
+    pthread_mutex_lock(&stop_mutex);
+    bool found = stop;
+    pthread_mutex_unlock(&stop_mutex);
+    if (found) {
+      printf("We found the password: %s\n", found_pass);
+      break;
+    } 
 
 }
 
